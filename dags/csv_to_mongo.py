@@ -1,25 +1,30 @@
+import json
+import time
+import pandas as pd
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-import pandas as pd
-from pymongo import MongoClient
-import json
+from airflow.providers.mongo.hooks.mongo import MongoHook
+from airflow.models import Variable
 
 # Default arguments for the DAG
 default_args = {
-    'owner': 'your_name',
-    'start_date': datetime(2025, 9, 24),
+    'owner': 't-liu',
+    'depends_on_past': False,
+    'start_date': days_ago(0),
+    'email_on_failure': True,
+    'email_on_retry': False,
     'retries': 1,
+    'catchup': False
 }
 
-# Define the DAG
-dag = DAG(
-    'csv_to_mongo_pipeline',
-    default_args=default_args,
-    description='ETL: CSV Flat File to MongoDB Collection',
-    schedule='@daily',
-    catchup=False,
-)
+def get_mongodb_config():
+    return {
+        'connection_string': Variable.get("ccpsdemographics_read_conn_string"),
+        'database': Variable.get("ccpsdemographics_read_database"),
+        'username': Variable.get("ccpsdemographics_read_user"),
+        'password': Variable.get("ccpsdemographics_read_password")
+    }
 
 # Task 1: Read CSV
 def read_csv(**kwargs):
@@ -33,26 +38,84 @@ def transform_to_json(**kwargs):
     ti = kwargs['ti']
     data = ti.xcom_pull(key='csv_data')
     
-    # Example transformation: Assume CSV has columns like 'id', 'name', 'address_street', 'address_city'
-    # Nest 'address' into a sub-dict for semi-structured format
-    transformed_data = []
-    for row in data:
-        transformed_row = {
-            'id': row.get('id'),
-            'name': row.get('name'),
-            'address': {
-                'street': row.get('address_street'),
-                'city': row.get('address_city'),
-                # Add more nesting as needed
-            },
-            # Add any other fields or logic here (e.g., data cleaning, aggregations)
-        }
-        transformed_data.append(transformed_row)
+    # Group by school_id
+    df = pd.DataFrame(data)
+    grouped = df.groupby('school_id')
     
-    # Convert to JSON string for easier storage/transfer
+    # Map level to levelFull
+    level_mapping = {
+        'E': 'Elementary',
+        'M': 'Middle',
+        'H': 'High',
+        'O': 'Other'
+    }
+    
+    transformed_data = []
+    current_timestamp = int(time.time() * 1000)  # Current time in milliseconds
+    
+    for school_id, group in grouped:
+        # Extract static school attributes (assume consistent across rows)
+        first_row = group.iloc[0]
+        
+        # Build yearlyData array
+        yearly_data = []
+        for _, row in group.iterrows():
+            start_year = int(row['year'].split('-')[0])
+            end_year = int(row['year'].split('-')[1])
+            total = int(row['black']) + int(row['hispanic']) + int(row['white']) + int(row['other'])
+            yearly_data.append({
+                'academicYear': {
+                    'full': row['year'],
+                    'short': row['short_year'],
+                    'startYear': {'$numberInt': str(start_year)},
+                    'endYear': {'$numberInt': str(end_year)}
+                },
+                'demographics': {
+                    'black': {'$numberInt': str(int(row['black']))},
+                    'hispanic': {'$numberInt': str(int(row['hispanic']))},
+                    'white': {'$numberInt': str(int(row['white']))},
+                    'other': {'$numberInt': str(int(row['other']))},
+                    'total': {'$numberInt': str(total)}
+                }
+            })
+        
+        # Compute firstYear, lastYear, yearsOfData
+        years = [int(row['year'].split('-')[0]) for _, row in group.iterrows()]
+        first_year = min(years)
+        last_year = max(years)
+        
+        # Create school document
+        school_doc = {
+            'schoolId': str(school_id),
+            'name': first_row['school'],
+            'location': {
+                'address': first_row['address'],
+                'city': first_row['city'],
+                'state': first_row['state'],
+                'zipCode': str(first_row['zip']),
+                'coordinates': {
+                    'type': 'Point',
+                    'coordinates': [
+                        {'$numberDouble': str(float(first_row['longitude']))},
+                        {'$numberDouble': str(float(first_row['latitude']))}
+                    ]
+                }
+            },
+            'level': first_row['level'],
+            'levelFull': level_mapping.get(first_row['level'], 'Unknown'),
+            'yearlyData': yearly_data,
+            'firstYear': {'$numberInt': str(first_year)},
+            'lastYear': {'$numberInt': str(last_year)},
+            'yearsOfData': {'$numberInt': str(len(years))},
+            'createdAt': {'$date': {'$numberLong': str(current_timestamp)}},
+            'updatedAt': {'$date': {'$numberLong': str(current_timestamp)}}
+        }
+        
+        transformed_data.append(school_doc)
+    
     json_data = json.dumps(transformed_data)
     ti.xcom_push(key='json_data', value=json_data)
-    print("Data transformed to semi-structured JSON.")
+    print(f"Transformed data for {len(transformed_data)} schools.")
 
 # Task 3: Load to MongoDB
 def load_to_mongo(**kwargs):
@@ -60,20 +123,29 @@ def load_to_mongo(**kwargs):
     json_str = ti.xcom_pull(key='json_data')
     data = json.loads(json_str)
     
-    # MongoDB connection (replace with your details)
-    mongo_uri = 'mongodb://localhost:27017/'  # Or 'mongodb+srv://user:pass@cluster.mongodb.net/'
-    client = MongoClient(mongo_uri)
-    db = client['your_database_name']  # Replace with your DB name
-    collection = db['your_collection_name']  # Replace with your collection name
+    # Get MongoDB Atlas configuration
+    mongo_config = get_mongodb_config()
     
-    # Insert data (use insert_many for bulk)
+    # Initialize MongoHook with connection string
+    hook = MongoHook(
+        conn_id='mongo_conn',
+        mongo_conn_str=mongo_config['connection_string'],
+        mongo_db=mongo_config['database']
+    )
+    
+    collection = hook.get_collection('schools', mongo_config['database'])
     if data:
         collection.insert_many(data)
         print(f"Inserted {len(data)} documents into MongoDB.")
-    else:
-        print("No data to insert.")
-    
-    client.close()
+
+# Define the DAG
+dag = DAG(
+    'ccpsdemographics_data_pipeline',
+    default_args=default_args,
+    description='ETL: CSV Flat File to MongoDB Collection',
+    schedule='@daily',
+    catchup=False,
+)
 
 # Define tasks
 read_task = PythonOperator(
