@@ -4,12 +4,14 @@ Work in progress.  This project is to illustrate a data pipeline developed using
 
 ### Start locally in Python
 
-Create a virtualenv: `python3 -m venv venv`
-Activate virtual env: `. ./venv/bin/activate`
-Update: `pip install --upgrade pip`
-Install: `pip install -r requirements.txt`
-Set Airflow Home: `export AIRFLOW_HOME=~/path/to/project`
-Ensure Airflow r/w permissions: `chmod -R 755 ~/path/to/project`
+```
+python3 -m venv venv
+. ./venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+export AIRFLOW_HOME=~/path/to/project
+chmod -R 755 ~/path/to/project
+```
 
 Initialize the Airflow database, scheduler, and web server:
 ```
