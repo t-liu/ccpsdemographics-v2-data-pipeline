@@ -247,12 +247,15 @@ packaged.yaml
 samconfig.toml
 events/*.json
 
-# Cursor
+# IDE
 .cursor/
+.idea/
 
 # Airflow specific
 airflow.cfg 
-airflow.db 
+airflow.db
+airflow.db-shm
+airflow.db-wal
 logs/ 
 simple_auth_manager_passwords.json.generated 
 webserver_config.py 
