@@ -13,7 +13,8 @@ from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.python import PythonOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from airflow.providers.mongo.hooks.mongo import MongoHook
+from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError, ConfigurationError
 
 # Default arguments for the DAG
 default_args = {
@@ -342,15 +343,16 @@ def load_to_mongo(**kwargs):
         # Get MongoDB Atlas configuration
         mongo_config = get_mongodb_config()
         print("Retrieved MongoDB configuration")
-        
-        # Initialize MongoHook with connection string
-        hook = MongoHook(
-            conn_id='mongodb_default',
-            mongo_conn_str=mongo_config['connection_string'],
-            mongo_db=mongo_config['database']
-        )
-        
-        collection = hook.get_collection('schools', mongo_config['database'])
+
+        client = MongoClient(mongo_config['connection_string'])
+            
+        # Get the specific database and collection
+        db = client[mongo_config['database']]
+        collections_before = db.list_collection_names()
+        print(f"📚 Collections in '{mongo_config['connection_string']}' before insert: {collections_before}")
+            
+        # Get the collection
+        collection = db['schools']
         
         # Insert documents
         result = collection.insert_many(data)
@@ -370,6 +372,8 @@ dag = DAG(
     description='ETL: CSV Flat File to MongoDB Collection',
     schedule='@daily',
     catchup=False,
+    max_active_runs=1,
+    tags=['etl', 'csv', 'mongodb', 'demographics']
 )
 
 # Define tasks
