@@ -20,7 +20,7 @@ from pymongo.errors import ServerSelectionTimeoutError, ConfigurationError
 default_args = {
     'owner': 't-liu',
     'depends_on_past': False,
-    'start_date': datetime(2025, 9, 25),  # Temporary fallback
+    'start_date': datetime.now() - timedelta(days=0),
     'max_active_tasks': 16,
     'execution_timeout': timedelta(minutes=2),
     'email_on_failure': True,
