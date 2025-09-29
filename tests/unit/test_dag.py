@@ -31,7 +31,7 @@ class TestConfigFunctions(unittest.TestCase):
             'mongodb+srv://user:pass@cluster.mongodb.net/project',
             'project',
             'user',
-            'pass'
+            'p@$$w0rD'
         ]
         
         # Act
@@ -42,7 +42,7 @@ class TestConfigFunctions(unittest.TestCase):
         self.assertEqual(config['database'], 'project')
         self.assertIn('mongodb+srv://', config['connection_string'])
         self.assertEqual(config['username'], 'user')
-        self.assertEqual(config['password'], 'pass')
+        self.assertEqual(config['password'], 'p@$$w0rD')
     
     @patch('csv_to_mongo.Variable.get')
     def test_get_mongodb_config_failure(self, mock_variable_get):
