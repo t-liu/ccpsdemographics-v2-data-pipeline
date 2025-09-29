@@ -25,6 +25,13 @@ airflow dags reserialize
 airflow dags list
 ```
 
+### Start locally in Python
+To run test suite locally:
+```
+pip install -r requirements-test.txt
+make test-coverage
+```
+
 ### Technologies/Languages
 * Application
     * Python
