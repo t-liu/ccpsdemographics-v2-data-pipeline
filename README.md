@@ -26,7 +26,7 @@ airflow dags list
 ```
 
 ### Start locally in Python
-To run test suite locally:
+To run test suite locally (check Makefile for correct arguments):
 ```
 pip install -r requirements-test.txt
 make test-coverage
