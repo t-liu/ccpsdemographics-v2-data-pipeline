@@ -272,4 +272,7 @@ data/output/
 *.swp 
 *~
 
+# Init files
+__init__.py
+
 # End of https://www.gitignore.io/api/osx,linux,python,windows,pycharm,visualstudiocode
