@@ -1,12 +1,9 @@
-import pytest
-import unittest
-from unittest.mock import patch, Mock, MagicMock, mock_open, call
-import pandas as pd
-import json
 import os
-import tempfile
-from datetime import datetime
+import json
+import unittest
+import pandas as pd
 from io import StringIO
+from unittest.mock import patch, Mock, mock_open, call
 
 # Import DAG functions
 import sys
@@ -18,7 +15,6 @@ from csv_to_mongo import (
     get_mongodb_config,
     get_s3_config
 )
-
 
 class TestConfigFunctions(unittest.TestCase):
     """Test configuration retrieval functions"""
